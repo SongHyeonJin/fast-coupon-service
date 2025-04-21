@@ -31,7 +31,9 @@ public class LoginSessionAspect {
 
             if (body instanceof UserResponseDto dto) {
                 request.getSession().setAttribute("userId", dto.getUserId());
-                log.info("✅ 세션 저장 userId = {}", dto.getUserId());
+                request.getSession().setAttribute("email", dto.getEmail());
+                request.getSession().setAttribute("role", dto.getRole());
+                log.info("✅ 세션 저장 userId = {}, email = {}, role = {}", dto.getUserId(), dto.getEmail(), dto.getRole());
             }
         }
 

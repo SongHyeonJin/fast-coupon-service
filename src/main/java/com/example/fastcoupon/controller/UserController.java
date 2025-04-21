@@ -1,7 +1,7 @@
 package com.example.fastcoupon.controller;
 
 import com.example.fastcoupon.aop.LoginSessionInject;
-import com.example.fastcoupon.dto.LoginRequestDto;
+import com.example.fastcoupon.dto.user.LoginRequestDto;
 import com.example.fastcoupon.dto.user.SignupRequestDto;
 import com.example.fastcoupon.dto.user.UserResponseDto;
 import com.example.fastcoupon.service.UserService;

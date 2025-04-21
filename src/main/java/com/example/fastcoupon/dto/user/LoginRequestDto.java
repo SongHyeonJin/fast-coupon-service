@@ -1,4 +1,4 @@
-package com.example.fastcoupon.dto;
+package com.example.fastcoupon.dto.user;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
