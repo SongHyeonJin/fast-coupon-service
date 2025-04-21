@@ -1,6 +1,6 @@
 package com.example.fastcoupon.service;
 
-import com.example.fastcoupon.dto.LoginRequestDto;
+import com.example.fastcoupon.dto.user.LoginRequestDto;
 import com.example.fastcoupon.dto.user.SignupRequestDto;
 import com.example.fastcoupon.dto.user.UserResponseDto;
 import com.example.fastcoupon.entity.User;
@@ -42,7 +42,7 @@ public class UserService {
                 .role(UserRoleEnum.USER)
                 .build();
         userRepository.save(user);
-        return new UserResponseDto(user.getId(), user.getName(), "회원가입 성공");
+        return new UserResponseDto(user.getId(), user.getName(), user.getEmail(), user.getRole(), "회원가입 성공");
     }
 
     @Transactional
@@ -58,7 +58,7 @@ public class UserService {
             throw new ErrorException(ExceptionEnum.WRONG_PASSWORD);
         }
 
-        return new UserResponseDto(user.getId(), user.getName(), "로그인 성공");
+        return new UserResponseDto(user.getId(), user.getName(), user.getEmail(), user.getRole(), "로그인 성공");
     }
 
 }
