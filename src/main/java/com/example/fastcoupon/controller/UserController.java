@@ -1,5 +1,7 @@
 package com.example.fastcoupon.controller;
 
+import com.example.fastcoupon.aop.LoginSessionInject;
+import com.example.fastcoupon.dto.LoginRequestDto;
 import com.example.fastcoupon.dto.user.SignupRequestDto;
 import com.example.fastcoupon.dto.user.UserResponseDto;
 import com.example.fastcoupon.service.UserService;
@@ -20,8 +22,13 @@ public class UserController {
 
     @PostMapping("/signup")
     public ResponseEntity<UserResponseDto> signup(@Valid @RequestBody SignupRequestDto requestDto) {
-        userService.signup(requestDto);
-        return ResponseEntity.ok(new UserResponseDto(requestDto.getName(), "회원가입 성공"));
+        return ResponseEntity.ok( userService.signup(requestDto));
+    }
+
+    @LoginSessionInject
+    @PostMapping("/login")
+    public ResponseEntity<UserResponseDto> login(@Valid @RequestBody LoginRequestDto requestDto) {
+        return ResponseEntity.ok(userService.login(requestDto));
     }
 
 }
