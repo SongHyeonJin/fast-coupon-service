@@ -8,6 +8,7 @@ import com.example.fastcoupon.exception.ErrorException;
 import com.example.fastcoupon.repository.CouponRepository;
 import com.example.fastcoupon.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +18,7 @@ public class AdminCouponService {
 
     private final UserRepository userRepository;
     private final CouponRepository couponRepository;
+    private final StringRedisTemplate redisTemplate;
 
     @Transactional
     public void createCoupon(CouponRequestDto requestDto, User user) {
@@ -31,6 +33,8 @@ public class AdminCouponService {
                 requestDto.getTotalQuantity(),
                 requestDto.getExpiredAt()
         );
+
+        redisTemplate.opsForSet().add("coupon:active:ids", coupon.getId().toString());
         couponRepository.save(coupon);
     }
 
