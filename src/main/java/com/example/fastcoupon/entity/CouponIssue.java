@@ -2,8 +2,6 @@ package com.example.fastcoupon.entity;
 
 import com.example.fastcoupon.entity.base.Timestamped;
 import com.example.fastcoupon.enums.CouponStatusEnum;
-import com.example.fastcoupon.enums.ExceptionEnum;
-import com.example.fastcoupon.exception.ErrorException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -49,13 +47,16 @@ public class CouponIssue extends Timestamped {
         this.userId = userId;
     }
 
-    // 쿠폰 사용 처리
-    public void use() {
-        if (this.used) {
-            throw new ErrorException(ExceptionEnum.COUPON_ALREADY_USED);
-        }
-        this.used = true;
-        this.usedAt = LocalDateTime.now();
-        this.status = CouponStatusEnum.USED;
+    public void updateUsed(boolean used) {
+        this.used = used;
     }
+
+    public void updateUsedAt(LocalDateTime usedAt) {
+        this.usedAt = usedAt;
+    }
+
+    public void updateStatus(CouponStatusEnum status) {
+        this.status = status;
+    }
+
 }
