@@ -16,7 +16,8 @@ public enum ExceptionEnum {
     LOCK_ACQUISITION_FAILED(HttpStatus.TOO_MANY_REQUESTS.value(), "COUPON", "요청이 몰려 있어 잠시 후 다시 시도해주세요."),
     INTERRUPTED_DURING_LOCK(HttpStatus.INTERNAL_SERVER_ERROR.value(), "COUPON", "처리 중 인터럽트가 발생했습니다."),
     COUPON_LUA_UNEXPECTED_RESULT(HttpStatus.INTERNAL_SERVER_ERROR.value(), "COUPON", "쿠폰 발급 중 알 수 없는 오류가 발생했습니다."),
-    COUPON_EXPIRED(HttpStatus.BAD_REQUEST.value(), "COUPON", "만료된 쿠폰은 사용할 수 없습니다.");
+    COUPON_EXPIRED(HttpStatus.BAD_REQUEST.value(), "COUPON", "만료된 쿠폰은 사용할 수 없습니다."),
+    DB_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR.value(), "COUPON", "쿠폰 발급 정보를 저장하는 데 실패했습니다.");
 
     private final int status;
     private final String type;
