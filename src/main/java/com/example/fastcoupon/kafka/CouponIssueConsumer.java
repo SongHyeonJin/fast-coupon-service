@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +24,14 @@ public class CouponIssueConsumer {
     private final CouponIssueRepository couponIssueRepository;
     private final CouponRepository couponRepository;
 
-    @KafkaListener(topics = "coupon.issue", groupId = "coupon-consumer-group", concurrency = "1")
+    @KafkaListener(topics = "coupon.issue", groupId = "coupon-consumer-group",
+            concurrency = "1", containerFactory = "kafkaListenerContainerFactory")
+    @RetryableTopic(
+            attempts = "3",
+            backoff = @Backoff(delay = 2000, multiplier = 2.0),
+            dltTopicSuffix = ".dlq", // 실패 시 자동으로 coupon.issue.dlq 로 전송
+            autoCreateTopics = "false" // 필요 시 true로 설정
+    )
     public void consume(CouponIssueEventDto event) {
         log.info("[Kafka] 쿠폰 발급 이벤트 수신 : couponId={}, userId={}", event.getCouponId(), event.getUserId());
 
@@ -47,9 +56,10 @@ public class CouponIssueConsumer {
                 .userId(event.getUserId())
                 .build();
 
-        couponIssueRepository.save(issue);
+
         coupon.decreaseRemainingQuantity();
         couponRepository.save(coupon);
+        couponIssueRepository.save(issue);
     }
 
 }

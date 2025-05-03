@@ -1,6 +1,5 @@
 package com.example.fastcoupon.kafka;
 
-import com.example.fastcoupon.dto.coupon.CouponIssueEventDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -11,20 +10,20 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CouponIssueProducer {
 
-    private final KafkaTemplate<String, CouponIssueEventDto> kafkaTemplate;
-    private static final String TOPIC = "coupon.issue";
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public void sendIssueEvent(Long couponId, Long userId)  {
-        CouponIssueEventDto event = new CouponIssueEventDto(couponId, userId);
-
-        kafkaTemplate.send(TOPIC, couponId.toString(), event)
-                .toCompletableFuture().whenComplete((result, ex) -> {
+    public <T> void send(String topic, String key, T payload) {
+        kafkaTemplate.send(topic, key, payload)
+                .toCompletableFuture()
+                .whenComplete((result, ex) -> {
                     if (ex != null) {
-                        log.error("Kafka 메시지 전송 실패: couponId={}, userId={}, error={}", couponId, userId, ex.getMessage());
+                        log.error("Kafka 전송 실패: topic={}, key={}, payload={}, error={}", topic, key, payload, ex.getMessage());
                     } else {
-                        log.info("[Kafka] 쿠폰 발급 이벤트 전송 : couponId={}, userId={}", couponId, userId);
+                        log.info("[Kafka] 쿠폰 발급 전송: topic={}, key={}, payload={}", topic, key, payload);
                     }
                 });
     }
 
 }
+
+
