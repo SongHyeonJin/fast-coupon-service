@@ -60,14 +60,13 @@ public class CouponControllerTest {
     @AfterEach
     void cleanup() {
         redisTemplate.delete("coupon:1:count");
-
-        Set<String> keys = redisTemplate.keys("coupon:1:user:*");
-        if (keys != null && !keys.isEmpty()) {
-            redisTemplate.delete(keys);
-        }
-
         redisTemplate.delete("coupon:1:queue");
         redisTemplate.delete("coupon:1:total");
+
+        Set<String> keys = redisTemplate.keys("coupon:1:user:*");
+        if (keys != null) {
+            redisTemplate.delete(keys);
+        }
 
         couponRepository.deleteAllInBatch();
         couponIssueRepository.deleteAllInBatch();
@@ -77,7 +76,7 @@ public class CouponControllerTest {
     @Test
     void 인증된_250명의_유저가_동시에_쿠폰발급_요청하면_100명만_발급된다() throws Exception {
         // given
-        int totalUsers = 250;
+        int totalUsers = 500;
         Long couponId = 1L;
         ExecutorService service = Executors.newFixedThreadPool(32);
         CountDownLatch latch = new CountDownLatch(totalUsers);
@@ -101,6 +100,7 @@ public class CouponControllerTest {
             });
         }
         latch.await();
+        service.shutdown();
         System.out.println("✅ 모든 요청 완료");
 
         // then
