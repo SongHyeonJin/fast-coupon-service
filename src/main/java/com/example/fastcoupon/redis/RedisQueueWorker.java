@@ -26,21 +26,35 @@ public class RedisQueueWorker {
     private final RedisCouponService redisService;
     private final StringRedisTemplate redisTemplate;
 
-    private static final String ACTIVE_COUPON_SET_KEY = "coupon:active:ids";
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     @EventListener
     public void onCouponQueued(CouponQueueEventDto event) {
         long couponId = event.getCouponId();
         String cleanKey = String.format("coupon:%d:done", couponId);
+        String lockKey = String.format("coupon:%d:running", couponId);
 
-        // 이미 cleanKey 존재하면 워커 안 띄움
         if (Boolean.TRUE.equals(redisTemplate.hasKey(cleanKey))) {
             log.info("✅ 이미 발급 완료된 쿠폰: couponId={}", couponId);
             return;
         }
 
-        executor.submit(() -> processQueue(couponId, cleanKey));
+        // 동일 쿠폰 워커 중복 실행 방지 (멀티 서버 대비용)
+        Boolean lockAcquired = redisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "true", Duration.ofMinutes(10));
+
+        if (Boolean.FALSE.equals(lockAcquired)) {
+            log.info("⛔ 워커 이미 실행 중: couponId={}", couponId);
+            return;
+        }
+
+        executor.submit(() -> {
+            try {
+                processQueue(couponId, cleanKey);
+            } finally {
+                redisTemplate.delete(lockKey); // 워커 종료 시 락 해제
+            }
+        });
     }
 
     private void processQueue(long couponId, String cleanKey) {
@@ -53,12 +67,11 @@ public class RedisQueueWorker {
             Long queueSize = redisTemplate.opsForList().size(queueKey);
             if (current >= total && (queueSize == null || queueSize == 0)) {
                 log.info("🎯 couponId={} 발급 완료({}/{}) - 워커 종료", couponId, current, total);
-                redisTemplate.opsForValue().set(cleanKey, "done", Duration.ofMinutes(10)); // cleanKey 설정
+                redisTemplate.opsForValue().set(cleanKey, "done", Duration.ofMinutes(10));
                 cleanupCouponData(couponId);
             } else {
                 log.info("⏳ 대기 시간 초과, 아직 남은 수량 있음: couponId={}", couponId);
             }
-
             return;
         }
 
@@ -68,22 +81,22 @@ public class RedisQueueWorker {
         switch (result) {
             case SUCCESS -> {
                 log.info("✅ 발급 성공: couponId={}, userId={}", couponId, userId);
-                couponIssueProducer.send("coupon.issue", String.valueOf(couponId), new CouponIssueEventDto(couponId, userId));
+                couponIssueProducer.send("coupon.issue", String.valueOf(couponId),
+                        new CouponIssueEventDto(couponId, userId));
             }
             case OUT_OF_STOCK -> log.info("🎯 재고 소진: couponId={}", couponId);
             case ALREADY_ISSUED -> log.warn("🚫 중복 발급 시도: couponId={}, userId={}", couponId, userId);
             default -> log.error("❌ 예기치 않은 결과: {} for couponId={} userId={}", result, couponId, userId);
         }
 
-        processQueue(couponId, cleanKey); // 재귀 호출
+        processQueue(couponId, cleanKey);
     }
 
     private void cleanupCouponData(long couponId) {
         String queueKey = String.format("coupon:%d:queue", couponId);
-
         log.info("✅ Redis 정리 시작: couponId={}", couponId);
 
-        redisTemplate.delete(queueKey); // 무조건 queue는 제거
+        redisTemplate.delete(queueKey);
         String userPattern = String.format("coupon:%d:user:*", couponId);
         Set<String> userKeys = redisTemplate.keys(userPattern);
         if (userKeys != null && !userKeys.isEmpty()) {
@@ -91,9 +104,9 @@ public class RedisQueueWorker {
         }
 
         redisTemplate.delete(Arrays.asList(
-                String.format("coupon:%d:count", couponId),
                 String.format("coupon:%d:total", couponId),
-                String.format("coupon:%d:expire", couponId)
+                String.format("coupon:%d:expire", couponId),
+                String.format("coupon:%d:count", couponId)
         ));
 
         log.info("🧹 Redis 정리 완료: couponId={}", couponId);
@@ -105,4 +118,3 @@ public class RedisQueueWorker {
         log.info("🛑 RedisQueueWorker 종료됨");
     }
 }
-
