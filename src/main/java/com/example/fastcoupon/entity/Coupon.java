@@ -49,10 +49,13 @@ public class Coupon extends Timestamped {
     }
 
     public void decreaseRemainingQuantity() {
+        if (this.remainingQuantity == 0) return;
+
         if (this.remainingQuantity > 0) {
             this.remainingQuantity -= 1;
         } else {
             throw new ErrorException(ExceptionEnum.COUPON_OUT_OF_STOCK);
         }
     }
+
 }
