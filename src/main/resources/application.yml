@@ -5,6 +5,12 @@ spring:
     url: jdbc:mysql://localhost:3306/fastcoupon?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: root
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 50
+#      minimum-idle: 5
+#      idle-timeout: 600000
+#      max-lifetime: 1800000
+#      connection-timeout: 30000  # default는 30초
 
   jpa:
     hibernate:
@@ -31,3 +37,17 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+
+redisson:
+  config: |
+    singleServerConfig:
+      address: "redis://localhost:6379"
+
+server:
+  tomcat:
+    max-threads: 500
+    accept-count: 1000
+
+slack:
+  webhook:
+    url: ${SLACK_WEBHOOK_URL:}
