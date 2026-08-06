@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CouponIssueDlqConsumerTest {
 
     @Autowired
-    KafkaTemplate<String, CouponIssueEventDto> kafkaTemplate;
+    KafkaTemplate<String, Object> kafkaTemplate;
 
     @Autowired
     KafkaDlqLogRepository kafkaDlqLogRepository;
