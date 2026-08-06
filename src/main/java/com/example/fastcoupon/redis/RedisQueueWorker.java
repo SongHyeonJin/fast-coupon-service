@@ -1,91 +1,120 @@
 package com.example.fastcoupon.redis;
 
+import com.example.fastcoupon.dto.coupon.CouponIssueEventDto;
+import com.example.fastcoupon.dto.coupon.CouponQueueEventDto;
 import com.example.fastcoupon.enums.CouponIssueEnum;
-import com.example.fastcoupon.service.CouponIssueService;
-import jakarta.annotation.PostConstruct;
+import com.example.fastcoupon.kafka.CouponIssueProducer;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class RedisQueueWorker {
 
-    private final CouponIssueService couponIssueService;
+    private final CouponIssueProducer couponIssueProducer;
     private final RedisCouponService redisService;
     private final StringRedisTemplate redisTemplate;
 
-    private final Set<Long> startedCoupons = ConcurrentHashMap.newKeySet();
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final AtomicBoolean running = new AtomicBoolean(true);
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    private static final String ACTIVE_COUPON_SET_KEY = "coupon:active:ids";
+    @EventListener
+    public void onCouponQueued(CouponQueueEventDto event) {
+        long couponId = event.getCouponId();
+        String cleanKey = String.format("coupon:%d:done", couponId);
+        String lockKey = String.format("coupon:%d:running", couponId);
 
-    @PostConstruct
-    public void startWorker() {
-        scheduler.scheduleAtFixedRate(() -> {
-            Set<String> active = redisTemplate.opsForSet().members(ACTIVE_COUPON_SET_KEY);
-            if (active == null || active.isEmpty()) return;
-            for (String id : active) {
-                long couponId = Long.parseLong(id);
-                if (!startedCoupons.add(couponId)) continue;
-                Executors.newSingleThreadExecutor().submit(() -> processQueue(couponId));
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(cleanKey))) {
+            log.info("✅ 이미 발급 완료된 쿠폰: couponId={}", couponId);
+            return;
+        }
+
+        // 동일 쿠폰 워커 중복 실행 방지 (멀티 서버 대비용)
+        Boolean lockAcquired = redisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "true", Duration.ofMinutes(10));
+
+        if (Boolean.FALSE.equals(lockAcquired)) {
+            log.info("⛔ 워커 이미 실행 중: couponId={}", couponId);
+            return;
+        }
+
+        executor.submit(() -> {
+            try {
+                processQueue(couponId, cleanKey);
+            } finally {
+                redisTemplate.delete(lockKey); // 워커 종료 시 락 해제
             }
-        }, 0, 2, TimeUnit.SECONDS);
+        });
     }
 
-    private void processQueue(long couponId) {
+    private void processQueue(long couponId, String cleanKey) {
         int total = redisService.getTotalCount(couponId);
-        while (running.get()) {
-            int current = redisService.getCurrentCount(couponId);
-            if (current >= total) {
-                log.info("🎯 couponId={} 이미 모두 처리됨({}/{}) - 워커 종료", couponId, current, total);
-                startedCoupons.remove(couponId);
+        int current = redisService.getCurrentCount(couponId);
+        String queueKey = String.format("coupon:%d:queue", couponId);
 
-                redisTemplate.opsForSet().remove("coupon:active:ids", String.valueOf(couponId));
-                redisTemplate.delete(Arrays.asList(
-                        "coupon:" + couponId + ":count",
-                        "coupon:" + couponId + ":total",
-                        "coupon:" + couponId + ":queue"
-                ));
-                return;
+        String data = redisService.blockingPopQueue(couponId);
+        if (data == null) {
+            Long queueSize = redisTemplate.opsForList().size(queueKey);
+            if (current >= total && (queueSize == null || queueSize == 0)) {
+                log.info("🎯 couponId={} 발급 완료({}/{}) - 워커 종료", couponId, current, total);
+                redisTemplate.opsForValue().set(cleanKey, "done", Duration.ofMinutes(10));
+                cleanupCouponData(couponId);
+            } else {
+                log.info("⏳ 대기 시간 초과, 아직 남은 수량 있음: couponId={}", couponId);
             }
-
-            String data = redisService.blockingPopQueue(couponId);
-            if (data == null) continue;
-            long userId = Long.parseLong(data.split(":")[1]);
-
-            CouponIssueEnum result = redisService.tryIssueCoupon(couponId, userId, total);
-            switch (result) {
-                case SUCCESS -> {
-                    couponIssueService.sendIssueEvent(couponId, userId);
-                }
-                case OUT_OF_STOCK -> {
-                    log.info("🎯 재고 소진, worker 종료: couponId={} total={}", couponId, total);
-                    return;
-                }
-                case ALREADY_ISSUED -> log.warn("🚫 중복 발급 시도 무시: couponId={} userId={}", couponId, userId);
-                default -> log.error("❌ 예기치 않은 결과: {} for couponId={} userId={}", result, couponId, userId);
-            }
+            return;
         }
+
+        long userId = Long.parseLong(data.split(":")[1]);
+        CouponIssueEnum result = redisService.tryIssueCoupon(couponId, userId, total);
+
+        switch (result) {
+            case SUCCESS -> {
+                log.info("✅ 발급 성공: couponId={}, userId={}", couponId, userId);
+                couponIssueProducer.send("coupon.issue", String.valueOf(couponId),
+                        new CouponIssueEventDto(couponId, userId));
+            }
+            case OUT_OF_STOCK -> log.info("🎯 재고 소진: couponId={}", couponId);
+            case ALREADY_ISSUED -> log.warn("🚫 중복 발급 시도: couponId={}, userId={}", couponId, userId);
+            default -> log.error("❌ 예기치 않은 결과: {} for couponId={} userId={}", result, couponId, userId);
+        }
+
+        processQueue(couponId, cleanKey);
+    }
+
+    private void cleanupCouponData(long couponId) {
+        String queueKey = String.format("coupon:%d:queue", couponId);
+        log.info("✅ Redis 정리 시작: couponId={}", couponId);
+
+        redisTemplate.delete(queueKey);
+        String userPattern = String.format("coupon:%d:user:*", couponId);
+        Set<String> userKeys = redisTemplate.keys(userPattern);
+        if (userKeys != null && !userKeys.isEmpty()) {
+            redisTemplate.delete(userKeys);
+        }
+
+        redisTemplate.delete(Arrays.asList(
+                String.format("coupon:%d:total", couponId),
+                String.format("coupon:%d:expire", couponId),
+                String.format("coupon:%d:count", couponId)
+        ));
+
+        log.info("🧹 Redis 정리 완료: couponId={}", couponId);
     }
 
     @PreDestroy
     public void stopWorker() {
-        running.set(false);
-        scheduler.shutdown();
-        startedCoupons.clear();
+        executor.shutdown();
         log.info("🛑 RedisQueueWorker 종료됨");
     }
 }

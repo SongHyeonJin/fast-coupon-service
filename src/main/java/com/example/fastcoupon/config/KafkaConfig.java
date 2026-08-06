@@ -26,7 +26,7 @@ import java.util.Map;
 public class KafkaConfig {
 
     @Bean
-    public ProducerFactory<String, CouponIssueEventDto> producerFactory() {
+    public ProducerFactory<String, Object> producerFactory() {
         Map<String, Object> config = new HashMap<>();
         config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -35,7 +35,7 @@ public class KafkaConfig {
     }
 
     @Bean
-    public KafkaTemplate<String, CouponIssueEventDto> kafkaTemplate() {
+    public KafkaTemplate<String, Object> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
     }
 
@@ -60,14 +60,18 @@ public class KafkaConfig {
     }
 
     @Bean
-    public DefaultErrorHandler kafkaErrorHandler() {
-        // 메시지 무시
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
-                new FixedBackOff(0L, 0) // 재시도 없이 바로 skip
-        );
+    public ConcurrentKafkaListenerContainerFactory<String, CouponIssueEventDto> dlqKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, CouponIssueEventDto> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory());
 
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+                new FixedBackOff(0L, 0)
+        );
         errorHandler.addNotRetryableExceptions(DataIntegrityViolationException.class);
-        return errorHandler;
+
+        factory.setCommonErrorHandler(errorHandler);
+        return factory;
     }
 
 }

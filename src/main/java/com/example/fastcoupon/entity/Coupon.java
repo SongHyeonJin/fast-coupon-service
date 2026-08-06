@@ -57,4 +57,5 @@ public class Coupon extends Timestamped {
             throw new ErrorException(ExceptionEnum.COUPON_OUT_OF_STOCK);
         }
     }
+
 }

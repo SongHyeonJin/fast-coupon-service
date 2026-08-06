@@ -11,9 +11,11 @@ public class CouponIssueEventDto {
 
     private Long couponId;
     private Long userId;
+    private String reason;
 
     public CouponIssueEventDto(Long couponId, Long userId) {
         this.couponId = couponId;
         this.userId = userId;
     }
+
 }
