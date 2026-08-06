@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 class CouponIssueProducerTest {
     @Autowired
-    KafkaTemplate<String, CouponIssueEventDto> kafkaTemplate;
+    KafkaTemplate<String, Object> kafkaTemplate;
 
     @Autowired
     CouponRepository couponRepository;
