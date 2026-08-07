@@ -16,6 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -55,6 +56,13 @@ public class CouponControllerTest {
             );
         }
         redisTemplate.opsForSet().add("coupon:active:ids", "1");
+
+        // RedisCouponService.getTotalCount()는 DB 폴백 없이 Redis 값만 보기 때문에,
+        // AdminCouponService.createCoupon()이 하는 것과 동일하게 total/expire를 직접
+        // 세팅해야 한다. total이 없으면 pushQueue()가 "재고 소진"으로 즉시 거부하고,
+        // expire가 없으면 tryIssueCoupon()의 Lua 스크립트가 TTL 0으로 SET을 시도해 실패한다.
+        redisTemplate.opsForValue().set("coupon:1:total", "100");
+        redisTemplate.opsForValue().set("coupon:1:expire", "", Duration.ofMinutes(10));
     }
 
     @AfterEach
