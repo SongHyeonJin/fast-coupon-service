@@ -100,8 +100,9 @@ public class RedisQueueWorker {
 
     private void processQueue(long couponId, String cleanKey) {
         String queueKey = String.format("coupon:%d:queue", couponId);
+        boolean isDone = false;
 
-        while (true) {
+        while (!isDone) {
             int total = redisService.getTotalCount(couponId);
             int current = redisService.getCurrentCount(couponId);
 
@@ -115,21 +116,21 @@ public class RedisQueueWorker {
                 } else {
                     log.info("⏳ 대기 시간 초과, 아직 남은 수량 있음: couponId={}", couponId);
                 }
-                return;
-            }
+                isDone = true;
+            } else {
+                long userId = Long.parseLong(data.split(":")[1]);
+                CouponIssueEnum result = redisService.tryIssueCoupon(couponId, userId, total);
 
-            long userId = Long.parseLong(data.split(":")[1]);
-            CouponIssueEnum result = redisService.tryIssueCoupon(couponId, userId, total);
-
-            switch (result) {
-                case SUCCESS -> {
-                    log.info("✅ 발급 성공: couponId={}, userId={}", couponId, userId);
-                    couponIssueProducer.send("coupon.issue", String.valueOf(couponId),
-                            new CouponIssueEventDto(couponId, userId));
+                switch (result) {
+                    case SUCCESS -> {
+                        log.info("✅ 발급 성공: couponId={}, userId={}", couponId, userId);
+                        couponIssueProducer.send("coupon.issue", String.valueOf(couponId),
+                                new CouponIssueEventDto(couponId, userId));
+                    }
+                    case OUT_OF_STOCK -> log.info("🎯 재고 소진: couponId={}", couponId);
+                    case ALREADY_ISSUED -> log.warn("🚫 중복 발급 시도: couponId={}, userId={}", couponId, userId);
+                    default -> log.error("❌ 예기치 않은 결과: {} for couponId={} userId={}", result, couponId, userId);
                 }
-                case OUT_OF_STOCK -> log.info("🎯 재고 소진: couponId={}", couponId);
-                case ALREADY_ISSUED -> log.warn("🚫 중복 발급 시도: couponId={}, userId={}", couponId, userId);
-                default -> log.error("❌ 예기치 않은 결과: {} for couponId={} userId={}", result, couponId, userId);
             }
         }
     }
