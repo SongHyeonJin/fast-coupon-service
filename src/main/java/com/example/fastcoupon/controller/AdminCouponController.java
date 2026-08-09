@@ -4,6 +4,7 @@ import com.example.fastcoupon.dto.common.BasicResponseDto;
 import com.example.fastcoupon.dto.coupon.CouponRequestDto;
 import com.example.fastcoupon.security.UserDetailsImpl;
 import com.example.fastcoupon.service.AdminCouponService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,7 +21,7 @@ public class AdminCouponController {
     private final AdminCouponService adminCouponService;
 
     @PostMapping("/coupons")
-    public ResponseEntity<BasicResponseDto> createCoupon(@RequestBody CouponRequestDto requestDto,
+    public ResponseEntity<BasicResponseDto> createCoupon(@Valid @RequestBody CouponRequestDto requestDto,
                                                          @AuthenticationPrincipal UserDetailsImpl userDetails) {
         adminCouponService.createCoupon(requestDto, userDetails.getUser());
         return ResponseEntity.ok(BasicResponseDto.addSuccess("쿠폰 등록 완료"));
