@@ -30,7 +30,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ErrorException.class)
     public ResponseEntity<ErrorResponseDto> handleErrorException(ErrorException e) {
-        log.warn("[{} 예외]: {}", e.getExceptionEnum().getMsg());
+        log.warn("[{} 예외]: {}", e.getExceptionEnum().getType(), e.getExceptionEnum().getMsg());
 
         ErrorResponseDto errorResponseDto = new ErrorResponseDto(
                 e.getExceptionEnum().getStatus(), e.getExceptionEnum().getType(), e.getExceptionEnum().getMsg()
