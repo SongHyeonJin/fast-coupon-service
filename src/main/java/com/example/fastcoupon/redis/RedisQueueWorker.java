@@ -125,7 +125,12 @@ public class RedisQueueWorker {
                     case SUCCESS -> {
                         log.info("✅ 발급 성공: couponId={}, userId={}", couponId, userId);
                         couponIssueProducer.send("coupon.issue", String.valueOf(couponId),
-                                new CouponIssueEventDto(couponId, userId));
+                                new CouponIssueEventDto(couponId, userId),
+                                ex -> {
+                                    // DB에 기록될 길이 끊겼으므로 Redis 발급도 취소해 재고 유령 소모를 막는다.
+                                    boolean rolledBack = redisService.rollbackIssue(couponId, userId);
+                                    log.error("↩️ Kafka 발행 실패로 발급 롤백: couponId={}, userId={}, rolledBack={}", couponId, userId, rolledBack);
+                                });
                     }
                     case OUT_OF_STOCK -> log.info("🎯 재고 소진: couponId={}", couponId);
                     case ALREADY_ISSUED -> log.warn("🚫 중복 발급 시도: couponId={}, userId={}", couponId, userId);

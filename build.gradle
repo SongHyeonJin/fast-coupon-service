@@ -42,6 +42,9 @@ dependencies {
 	// Redis
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+	// 멀티 서버 세션 공유
+	implementation 'org.springframework.session:spring-session-data-redis'
+
 	// Kafka
 	implementation 'org.springframework.kafka:spring-kafka'
 

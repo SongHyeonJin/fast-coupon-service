@@ -1,4 +1,7 @@
 spring:
+  autoconfigure:
+    # MockMvc의 MockHttpSession을 Spring Session 필터가 가로채지 않도록 테스트에서는 제외
+    exclude: org.springframework.boot.autoconfigure.session.SessionAutoConfiguration
   datasource:
     url: jdbc:mysql://localhost:3306/jin?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: root
