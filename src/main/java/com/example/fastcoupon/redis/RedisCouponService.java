@@ -90,6 +90,24 @@ public class RedisCouponService {
         };
     }
 
+    // userKey가 실제로 있을 때만 되돌리므로 중복 호출/정리 후 호출에도 count가 음수가 되지 않는다.
+    private static final String ROLLBACK_SCRIPT = """
+        if redis.call("DEL", KEYS[1]) == 1 and redis.call("EXISTS", KEYS[2]) == 1 then
+            redis.call("DECR", KEYS[2])
+            return 1
+        end
+        return 0
+    """;
+
+    /** Kafka 발행 실패 시 tryIssueCoupon의 효과(count 증가 + userKey)를 원자적으로 되돌린다. */
+    public boolean rollbackIssue(Long couponId, Long userId) {
+        Long result = redisTemplate.execute(
+                new DefaultRedisScript<>(ROLLBACK_SCRIPT, Long.class),
+                Arrays.asList(String.format(USER_ISSUED_KEY, couponId, userId),
+                        String.format(COUPON_COUNT_KEY, couponId)));
+        return Long.valueOf(1L).equals(result);
+    }
+
     public void pushQueue(Long couponId, Long userId) {
         String userKey = String.format(USER_ISSUED_KEY, couponId, userId);
         if (Boolean.TRUE.equals(redisTemplate.hasKey(userKey))) {
