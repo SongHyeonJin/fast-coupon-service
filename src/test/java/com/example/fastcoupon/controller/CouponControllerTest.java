@@ -43,41 +43,44 @@ public class CouponControllerTest {
     @Autowired private CouponRepository couponRepository;
     @Autowired private CouponIssueRepository couponIssueRepository;
 
+    private Long couponId;
+
     @BeforeEach
     void setup() {
-        // 쿠폰 등록 (ID = 1)
-        if (!couponRepository.existsById(1L)) {
-            couponRepository.save(
-                    com.example.fastcoupon.entity.Coupon.createCoupon("테스트 쿠폰",
-                            com.example.fastcoupon.enums.CouponTypeEnum.CHICKEN,
-                            100,
-                            LocalDateTime.now().plusDays(3)
-                    )
-            );
-        }
-        redisTemplate.opsForSet().add("coupon:active:ids", "1");
+        // ID를 하드코딩하지 않는다. ddl-auto=create 이후 AUTO_INCREMENT 상태에 따라 실제 ID가 달라진다.
+        couponId = couponRepository.save(
+                com.example.fastcoupon.entity.Coupon.createCoupon("테스트 쿠폰",
+                        com.example.fastcoupon.enums.CouponTypeEnum.CHICKEN,
+                        100,
+                        LocalDateTime.now().plusDays(3)
+                )
+        ).getId();
+        deleteCouponKeys(); // 다른 테스트가 같은 ID로 남긴 done/running 키가 워커를 막지 않도록
+
+        redisTemplate.opsForSet().add("coupon:active:ids", String.valueOf(couponId));
 
         // RedisCouponService.getTotalCount()는 DB 폴백 없이 Redis 값만 보기 때문에,
         // AdminCouponService.createCoupon()이 하는 것과 동일하게 total/expire를 직접
         // 세팅해야 한다. total이 없으면 pushQueue()가 "재고 소진"으로 즉시 거부하고,
         // expire가 없으면 tryIssueCoupon()의 Lua 스크립트가 TTL 0으로 SET을 시도해 실패한다.
-        redisTemplate.opsForValue().set("coupon:1:total", "100");
-        redisTemplate.opsForValue().set("coupon:1:expire", "", Duration.ofMinutes(10));
+        redisTemplate.opsForValue().set("coupon:" + couponId + ":total", "100");
+        redisTemplate.opsForValue().set("coupon:" + couponId + ":expire", "", Duration.ofMinutes(10));
     }
 
     @AfterEach
     void cleanup() {
-        redisTemplate.delete("coupon:1:count");
-        redisTemplate.delete("coupon:1:queue");
-        redisTemplate.delete("coupon:1:total");
+        deleteCouponKeys(); // done/running까지 지운다. 남기면 같은 ID를 받는 다음 테스트의 워커가 건너뛴다.
+        redisTemplate.opsForSet().remove("coupon:active:ids", String.valueOf(couponId));
 
-        Set<String> keys = redisTemplate.keys("coupon:1:user:*");
-        if (keys != null) {
+        couponIssueRepository.deleteAllInBatch();
+        couponRepository.deleteAllInBatch();
+    }
+
+    private void deleteCouponKeys() {
+        Set<String> keys = redisTemplate.keys("coupon:" + couponId + ":*");
+        if (keys != null && !keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
-
-        couponRepository.deleteAllInBatch();
-        couponIssueRepository.deleteAllInBatch();
     }
 
     @DisplayName("250명의 유저가 동시에 발급 요청 시 정확히 100명만 발급된다")
@@ -85,7 +88,6 @@ public class CouponControllerTest {
     void 인증된_250명의_유저가_동시에_쿠폰발급_요청하면_100명만_발급된다() throws Exception {
         // given
         int totalUsers = 500;
-        Long couponId = 1L;
         ExecutorService service = Executors.newFixedThreadPool(32);
         CountDownLatch latch = new CountDownLatch(totalUsers);
 
