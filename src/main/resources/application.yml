@@ -25,6 +25,9 @@ spring:
       host: localhost
       port: 6379
 
+  session:
+    timeout: 30m
+
   kafka:
     bootstrap-servers: localhost:9092
     producer:
