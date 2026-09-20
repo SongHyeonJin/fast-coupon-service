@@ -16,7 +16,7 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Arrays;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -51,6 +51,7 @@ class RedisQueueWorkerRaceConditionTest {
         coupon = couponRepository.save(
                 Coupon.createCoupon("테스트 쿠폰", CouponTypeEnum.CHICKEN, 10, LocalDateTime.now().plusDays(1))
         );
+        deleteCouponKeys(); // 다른 테스트가 같은 ID로 남긴 done/running 키 제거
         redisTemplate.opsForValue().set("coupon:" + coupon.getId() + ":total", "10");
         redisTemplate.opsForValue().set("coupon:" + coupon.getId() + ":expire", "", Duration.ofMinutes(10));
         // RedisQueueWorker.sweepStuckQueues()가 이 세트를 스캔 대상으로 삼는다
@@ -63,17 +64,15 @@ class RedisQueueWorkerRaceConditionTest {
         couponIssueRepository.deleteAllInBatch();
         couponRepository.deleteAllInBatch();
 
-        long couponId = coupon.getId();
-        redisTemplate.opsForSet().remove("coupon:active:ids", String.valueOf(couponId));
-        redisTemplate.delete(Arrays.asList(
-                "coupon:" + couponId + ":total",
-                "coupon:" + couponId + ":expire",
-                "coupon:" + couponId + ":count",
-                "coupon:" + couponId + ":queue",
-                "coupon:" + couponId + ":running",
-                "coupon:" + couponId + ":done",
-                "coupon:" + couponId + ":user:1"
-        ));
+        redisTemplate.opsForSet().remove("coupon:active:ids", String.valueOf(coupon.getId()));
+        deleteCouponKeys();
+    }
+
+    private void deleteCouponKeys() {
+        Set<String> keys = redisTemplate.keys("coupon:" + coupon.getId() + ":*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
     }
 
     @DisplayName("워커가 락을 쥐고 있는 동안 들어온 요청은 락이 풀린 뒤 자동으로 처리돼야 한다")

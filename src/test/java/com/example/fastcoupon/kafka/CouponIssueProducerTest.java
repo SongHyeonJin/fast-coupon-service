@@ -6,6 +6,7 @@ import com.example.fastcoupon.enums.CouponTypeEnum;
 import com.example.fastcoupon.repository.CouponIssueRepository;
 import com.example.fastcoupon.repository.CouponRepository;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,12 +37,15 @@ class CouponIssueProducerTest {
     @Autowired
     StringRedisTemplate redisTemplate;
 
+    private Long couponId;
+
     @BeforeEach
     void setup() {
-        couponRepository.save(Coupon.createCoupon("테스트 쿠폰", CouponTypeEnum.CHICKEN, 100, LocalDateTime.now().plusDays(4)));
+        // ID를 하드코딩하지 않는다. 컨텍스트 생성 순서에 따라 AUTO_INCREMENT가 달라진다.
+        couponId = couponRepository.save(Coupon.createCoupon("테스트 쿠폰", CouponTypeEnum.CHICKEN, 100, LocalDateTime.now().plusDays(4))).getId();
 
-        redisTemplate.delete("coupon:1:count");
-        Set<String> keys = redisTemplate.keys("coupon:1:user:*");
+        redisTemplate.delete("coupon:" + couponId + ":count");
+        Set<String> keys = redisTemplate.keys("coupon:" + couponId + ":user:*");
         if (keys != null && !keys.isEmpty()) {
             redisTemplate.delete(keys);
         }
@@ -49,12 +53,17 @@ class CouponIssueProducerTest {
         couponIssueRepository.deleteAll();
     }
 
+    @AfterEach
+    void tearDown() {
+        couponIssueRepository.deleteAllInBatch();
+        couponRepository.deleteAllInBatch();
+    }
+
     @DisplayName("Kafka 발급 이벤트 전송 시 Consumer가 DB에 저장한다")
     @Test
     void Kafka_이벤트_수신_후_DB_저장_검증() throws Exception {
         // given
         Long userId = 777L;
-        Long couponId = 1L;
         CouponIssueEventDto eventDto = new CouponIssueEventDto(couponId, userId);
 
         // when

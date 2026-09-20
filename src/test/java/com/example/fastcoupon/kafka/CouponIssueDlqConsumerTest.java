@@ -4,6 +4,7 @@ import com.example.fastcoupon.dto.coupon.CouponIssueEventDto;
 import com.example.fastcoupon.repository.KafkaDlqLogRepository;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,8 +26,9 @@ class CouponIssueDlqConsumerTest {
     @Autowired
     KafkaDlqLogRepository kafkaDlqLogRepository;
 
+    @BeforeEach
     @AfterEach
-    void tearDown() {
+    void cleanLogs() {
         kafkaDlqLogRepository.deleteAllInBatch();
     }
 
@@ -45,7 +47,10 @@ class CouponIssueDlqConsumerTest {
         Awaitility.await()
                 .atMost(Duration.ofSeconds(40))
                 .untilAsserted(() -> {
-                    var logs = kafkaDlqLogRepository.findAll();
+                    // 다른 테스트가 만든 DLQ 로그가 섞일 수 있으므로 이 테스트의 이벤트만 본다
+                    var logs = kafkaDlqLogRepository.findAll().stream()
+                            .filter(l -> nonExistentCouponId.equals(l.getCouponId()))
+                            .toList();
                     assertThat(logs).hasSize(1);
                     assertThat(logs.get(0).getCouponId()).isEqualTo(nonExistentCouponId);
                     assertThat(logs.get(0).getUserId()).isEqualTo(userId);
