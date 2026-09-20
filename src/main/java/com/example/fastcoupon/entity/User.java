@@ -8,10 +8,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
+
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User extends Timestamped {
+// SecurityContext(UserDetailsImpl)가 Redis 세션에 JDK 직렬화로 저장되므로 Serializable 필요
+public class User extends Timestamped implements Serializable {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
